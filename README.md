@@ -13,21 +13,26 @@ the guided tour.
 ## Quick start
 
 ```bash
-cp .env.example .env.local   # then add your API key
 npm install
+cp .env.example .env.local   # then add your API key (see below)
+npm run check                # verifies the key works before you start
 npm run dev                  # http://localhost:3000
 ```
+
+`npm run check` makes one small real request and tells you exactly what is
+wrong if it fails — bad key, wrong model ID, no credit, Ollama not running.
+Use `npm run check -- --models` to list the model IDs your key can call.
 
 ### Picking a provider
 
 Set two variables in `.env.local`:
 
-| Provider    | `LLM_PROVIDER` | Key needed              | Notes                                        |
-|-------------|----------------|-------------------------|----------------------------------------------|
-| Claude      | `anthropic`    | `ANTHROPIC_API_KEY`     | console.anthropic.com                        |
-| OpenAI      | `openai`       | `OPENAI_API_KEY`        | platform.openai.com                          |
-| Groq        | `groq`         | `GROQ_API_KEY`          | Free tier, very fast — good for experimenting |
-| Ollama      | `ollama`       | none                    | `ollama serve` + `ollama pull llama3.2`      |
+| Provider | `LLM_PROVIDER` | Cost | Where to get the key |
+|---|---|---|---|
+| Groq | `groq` | Free tier, no card | [console.groq.com/keys](https://console.groq.com/keys) |
+| Ollama | `ollama` | Free, runs locally | none — [ollama.com/download](https://ollama.com/download) |
+| Claude | `anthropic` | Prepaid credits | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+| OpenAI | `openai` | Prepaid credits | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 
 `LLM_MODEL` is optional; leave it blank to use each provider's default.
 
@@ -137,4 +142,6 @@ npm run dev        # dev server with hot reload
 npm run build      # production build
 npm start          # serve the production build
 npm run typecheck  # tsc --noEmit
+npm run check      # verify provider + key
+npm run check -- --models   # list model IDs your key can use
 ```
