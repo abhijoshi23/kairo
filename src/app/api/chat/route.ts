@@ -1,4 +1,7 @@
+import { cookies } from "next/headers";
 import { z } from "zod";
+
+import { COOKIE_NAME, getPassphrase, verifySessionToken } from "@/lib/auth";
 import {
   getGenerationSettings,
   getModel,
@@ -23,16 +26,34 @@ import { checkRateLimit, clientKey } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Bounds on what one request may cost.
+ *
+ * Do the arithmetic before choosing these numbers. 40 messages of 8000
+ * characters is ~80,000 input tokens - about $0.16 per request on a mid-tier
+ * model, and nothing stops someone sending it in a loop. The caps below hold
+ * the worst case near 6,000 input tokens, roughly a cent.
+ */
+const MAX_MESSAGES = 24;
+const MAX_MESSAGE_CHARS = 4000;
+const MAX_TOTAL_CHARS = 24_000;
+
 const RequestSchema = z.object({
   messages: z
     .array(
       z.object({
         role: z.enum(["user", "assistant"]),
-        content: z.string().min(1).max(8000),
+        content: z.string().min(1).max(MAX_MESSAGE_CHARS),
       }),
     )
     .min(1)
-    .max(40),
+    .max(MAX_MESSAGES)
+    // Per-message caps are not enough on their own: 24 x 4000 still adds up.
+    // This bounds the conversation as a whole.
+    .refine(
+      (messages) => messages.reduce((total, m) => total + m.content.length, 0) <= MAX_TOTAL_CHARS,
+      { message: "Conversation is too long." },
+    ),
 });
 
 /**
@@ -46,6 +67,18 @@ function line(payload: unknown): Uint8Array {
 }
 
 export async function POST(request: Request) {
+  // --- 0. Authentication ---------------------------------------------------
+  // Middleware already blocked unauthenticated requests. This repeats the
+  // check anyway: a route that spends money should not depend on a matcher
+  // regex staying correct through future edits.
+  const passphrase = getPassphrase();
+  if (process.env.NODE_ENV === "production" || passphrase) {
+    const token = (await cookies()).get(COOKIE_NAME)?.value;
+    if (!passphrase || !(await verifySessionToken(token, passphrase))) {
+      return Response.json({ error: "Not signed in." }, { status: 401 });
+    }
+  }
+
   // --- 1. Rate limit -------------------------------------------------------
   const { allowed, retryAfter } = checkRateLimit(clientKey(request));
   if (!allowed) {

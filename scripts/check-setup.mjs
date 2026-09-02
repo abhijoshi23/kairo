@@ -78,6 +78,17 @@ const PROVIDERS = {
   },
 };
 
+const passphrase = (env.APP_PASSPHRASE || "").trim();
+if (!passphrase) {
+  console.log(`${YELLOW}  !${RESET} APP_PASSPHRASE is empty — fine for local dev, but a`);
+  console.log(`      deployed Kairo will refuse to serve until you set it.`);
+  console.log(`${DIM}      Generate one with:  openssl rand -base64 24${RESET}`);
+} else if (passphrase.length < 12) {
+  console.log(`${YELLOW}  !${RESET} APP_PASSPHRASE is short (${passphrase.length} chars) — use 20+`);
+} else {
+  ok(`APP_PASSPHRASE set (${passphrase.length} chars)`);
+}
+
 const providerName = (env.LLM_PROVIDER || "").trim().toLowerCase();
 if (!providerName) {
   bad("LLM_PROVIDER is empty");

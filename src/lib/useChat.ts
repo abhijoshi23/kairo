@@ -76,6 +76,13 @@ export function useChat() {
           signal: controller.signal,
         });
 
+        // The session cookie expires after 7 days. Send them back to the
+        // login screen rather than showing a cryptic error.
+        if (response.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+
         if (!response.ok) {
           const body = await response.json().catch(() => null);
           throw new Error(body?.error ?? `Request failed (${response.status})`);

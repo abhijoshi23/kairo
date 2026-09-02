@@ -33,14 +33,25 @@ export default function Chat() {
               <p className="text-[0.7rem] text-muted">Personal assistant</p>
             </div>
           </div>
-          {messages.length > 0 && (
+          <div className="flex items-center gap-2">
+            {messages.length > 0 && (
+              <button
+                onClick={reset}
+                className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-foreground"
+              >
+                New chat
+              </button>
+            )}
             <button
-              onClick={reset}
-              className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-foreground"
+              onClick={async () => {
+                await fetch("/api/login", { method: "DELETE" });
+                window.location.href = "/login";
+              }}
+              className="rounded-lg px-2 py-1.5 text-xs text-muted transition-colors hover:text-foreground"
             >
-              New chat
+              Sign out
             </button>
-          )}
+          </div>
         </div>
       </header>
 

@@ -96,23 +96,62 @@ src/
     ├── persona/
     │   ├── profile.ts        ← EDIT THIS: the facts about you
     │   └── index.ts          assembles the system prompt
+    ├── auth.ts               signed session cookies, constant-time compares
     ├── rate-limit.ts         cheap spend guard
     └── useChat.ts            client-side streaming + state
 ```
 
 ---
 
-## Deploying
+## Security
 
-Vercel is the path of least resistance for a Next.js app:
+Kairo is private by default. `src/middleware.ts` gates every route except the
+login screen, and a deployed instance with no `APP_PASSPHRASE` **refuses to
+serve at all** rather than running wide open.
+
+Why this matters more than it looks: an unauthenticated LLM endpoint on a
+public URL is a free API proxy billed to your card, and bots scan for exactly
+that. The passphrase closes it.
+
+How the session works — worth reading, it is only ~100 lines in
+`src/lib/auth.ts`:
+
+- The cookie holds **no secret**: an expiry plus an HMAC of that expiry, signed
+  with a key only the server knows. Forging one requires the key.
+- The signing key is derived from `APP_PASSPHRASE`, so changing the passphrase
+  invalidates every live session — your panic button if it leaks.
+- The cookie is `HttpOnly` (script cannot read it), `SameSite=Lax` (not sent on
+  cross-site POSTs) and `Secure` in production (HTTPS only).
+- Both comparisons are constant-time, and the passphrase is hashed before
+  comparison so the check does not leak its length.
+- Login is rate-limited to 8 attempts per minute with a 400ms delay on failure.
+
+### What is still not protected
+
+Be clear-eyed about the limits:
+
+| Control | Reality |
+|---|---|
+| Rate limiter | In-memory, per serverless instance. A stumble guard, not a spend guard. Move it to Redis (Upstash) if you need a real one. |
+| `clientKey()` | Trusts `x-forwarded-for`, which is only safe because **Vercel overwrites it**. On a VPS or behind your own nginx it is spoofable — fix it before hosting elsewhere. |
+| Prompt injection | The rules in the system prompt are a mitigation, not a guarantee. The real defence is that this app can only emit text: no tools, no database, no filesystem. That changes the day you add tool calling. |
+| `profile.ts` | Public twice over — it is in this repo, and injection can extract the system prompt. **Put nothing there you would not publish.** |
+
+**The one control an attacker cannot bypass is a hard spend limit in your
+provider's billing console.** Set it before you deploy.
+
+## Deploying
 
 1. Push this repo to GitHub.
 2. Import it at [vercel.com/new](https://vercel.com/new).
-3. Add `LLM_PROVIDER` and your API key under **Settings → Environment Variables**.
-4. Deploy.
+3. Under **Settings → Environment Variables**, add:
+   - `APP_PASSPHRASE` — generate with `openssl rand -base64 24`
+   - `LLM_PROVIDER` and the matching API key
+4. Deploy, then set a spend limit in your provider's billing console.
 
 Do **not** commit `.env.local` — it is gitignored for a reason. If a key ever
-lands in a commit, rotate it; deleting the commit is not enough.
+lands in a commit, rotate it; deleting the commit is not enough, because it
+stays in the history and bots scrape for exactly this.
 
 Ollama will not work on Vercel (the model runs on your laptop, not theirs).
 Use a hosted provider for anything you deploy.

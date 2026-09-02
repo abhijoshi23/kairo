@@ -1,22 +1,27 @@
 /**
  * A deliberately tiny in-memory rate limiter.
  *
- * Why it exists: your API key is attached to every request this server makes.
- * Without a guard, one loop in a browser tab can spend real money. This is the
- * cheapest possible protection.
+ * BE HONEST ABOUT WHAT THIS IS. The counter lives in one process's memory, so
+ * on a serverless host (Vercel) every instance keeps its own tally and every
+ * cold start resets it. Your real limit is roughly `limit x warm instances`.
+ * It is a stumble guard, not a spend guard.
  *
- * Its limits, honestly: the counter lives in this process's memory, so it
- * resets on restart and is not shared between serverless instances. For a real
- * deployment you would move this to Redis (e.g. Upstash). Good enough for a
- * personal app; not a security boundary.
+ * The three things that actually protect you, in order:
+ *   1. A hard spend limit set in your provider's billing console.
+ *   2. Authentication (see src/middleware.ts) - no strangers, no abuse.
+ *   3. This.
+ *
+ * To make it real, move the counter to Redis (Upstash works well on Vercel).
  */
 type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
 const WINDOW_MS = 60_000;
 
-export function checkRateLimit(key: string): { allowed: boolean; retryAfter: number } {
-  const limit = Number(process.env.RATE_LIMIT_PER_MINUTE ?? 20);
+export function checkRateLimit(
+  key: string,
+  limit = Number(process.env.RATE_LIMIT_PER_MINUTE ?? 20),
+): { allowed: boolean; retryAfter: number } {
   const now = Date.now();
   const bucket = buckets.get(key);
 
@@ -32,7 +37,18 @@ export function checkRateLimit(key: string): { allowed: boolean; retryAfter: num
   return { allowed: true, retryAfter: 0 };
 }
 
-/** Best-effort client identity behind a proxy. */
+/**
+ * Best-effort client identity.
+ *
+ * IMPORTANT CAVEAT: `x-forwarded-for` is normally set by the client and is
+ * therefore spoofable - anyone can rotate it to get a fresh bucket. It is
+ * trustworthy on Vercel specifically, because Vercel overwrites the header and
+ * refuses to forward external IPs precisely to prevent that.
+ *
+ * If you ever host this behind your own nginx, on a VPS, or on any platform
+ * that passes the client's header through, this function must change: trust
+ * only the value your proxy appends, not the leftmost one.
+ */
 export function clientKey(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0]!.trim();
