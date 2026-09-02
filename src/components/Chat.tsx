@@ -9,11 +9,11 @@ const SUGGESTIONS = [
   "Who are you and what can you help me with?",
   "Summarise my background for a recruiter.",
   "What am I currently working on?",
-  "Help me draft a short intro email.",
+  "What happened in AI news this week?",
 ];
 
 export default function Chat() {
-  const { messages, isStreaming, error, send, stop, reset } = useChat();
+  const { messages, isStreaming, activity, error, send, stop, reset } = useChat();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,6 +84,7 @@ export default function Chat() {
                   key={message.id}
                   message={message}
                   isStreaming={isStreaming && index === messages.length - 1}
+                  activity={index === messages.length - 1 ? activity : null}
                 />
               ))}
             </div>

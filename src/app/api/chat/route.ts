@@ -8,35 +8,42 @@ import {
   getProvider,
   LLMError,
   type ChatMessage,
+  type ToolCall,
 } from "@/lib/llm";
 import { buildSystemPrompt } from "@/lib/persona";
 import { checkRateLimit, clientKey } from "@/lib/rate-limit";
+import { getToolDefinitions, runTool } from "@/lib/tools";
 
 /**
- * The server half of the app. Three responsibilities, in order:
+ * The server half of the app.
  *
- *   1. Keep the API key on the server. The browser never sees it. This is the
- *      single most important reason this route exists at all - a "call the LLM
- *      from the frontend" app leaks your key to anyone who opens devtools.
+ *   1. Keep the API key on the server. The browser never sees it.
  *   2. Validate and bound the input before spending money on it.
- *   3. Stream the model's output back so the page feels alive.
+ *   3. Run the agent loop and stream the result back.
+ *
+ * The agent loop is the part that changed when web search arrived. A plain
+ * chat request is one call to the model. A tool-enabled request is a
+ * conversation: the model asks for a search, we run it, we hand back the
+ * results, and it asks again or answers. Each turn re-sends the whole
+ * conversation, so the loop MUST be bounded - see MAX_TOOL_ROUNDS.
  */
 
-// Node runtime (not edge) so we can use the full fetch/stream API predictably.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
  * Bounds on what one request may cost.
  *
- * Do the arithmetic before choosing these numbers. 40 messages of 8000
- * characters is ~80,000 input tokens - about $0.16 per request on a mid-tier
- * model, and nothing stops someone sending it in a loop. The caps below hold
- * the worst case near 6,000 input tokens, roughly a cent.
+ * Do the arithmetic before choosing these numbers. Each tool round is another
+ * full model call carrying the whole conversation plus every result so far, so
+ * cost grows faster than linearly. Three rounds plus a forced final answer is
+ * enough for "search, refine, answer" and cannot run away.
  */
 const MAX_MESSAGES = 24;
 const MAX_MESSAGE_CHARS = 4000;
 const MAX_TOTAL_CHARS = 24_000;
+const MAX_TOOL_ROUNDS = 3;
+const MAX_TOTAL_SEARCHES = 4;
 
 const RequestSchema = z.object({
   messages: z
@@ -48,19 +55,17 @@ const RequestSchema = z.object({
     )
     .min(1)
     .max(MAX_MESSAGES)
-    // Per-message caps are not enough on their own: 24 x 4000 still adds up.
-    // This bounds the conversation as a whole.
     .refine(
-      (messages) => messages.reduce((total, m) => total + m.content.length, 0) <= MAX_TOTAL_CHARS,
+      (messages) =>
+        messages.reduce((total, message) => total + message.content.length, 0) <= MAX_TOTAL_CHARS,
       { message: "Conversation is too long." },
     ),
 });
 
 /**
- * We answer with newline-delimited JSON rather than raw text. One line per
- * event means the client can tell the difference between "here is more text",
- * "we are finished", and "something went wrong mid-stream" - which raw text
- * cannot express once the response headers are already sent.
+ * Newline-delimited JSON, one event per line. Once streaming starts the HTTP
+ * status is already sent, so structured events are the only way to express
+ * "a tool is running", "here are the sources", or "this failed mid-stream".
  */
 function line(payload: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(payload) + "\n");
@@ -68,9 +73,6 @@ function line(payload: unknown): Uint8Array {
 
 export async function POST(request: Request) {
   // --- 0. Authentication ---------------------------------------------------
-  // Middleware already blocked unauthenticated requests. This repeats the
-  // check anyway: a route that spends money should not depend on a matcher
-  // regex staying correct through future edits.
   const passphrase = getPassphrase();
   if (process.env.NODE_ENV === "production" || passphrase) {
     const token = (await cookies()).get(COOKIE_NAME)?.value;
@@ -89,15 +91,14 @@ export async function POST(request: Request) {
   }
 
   // --- 2. Validate ---------------------------------------------------------
-  let messages: ChatMessage[];
+  let incoming: Array<{ role: "user" | "assistant"; content: string }>;
   try {
-    const body = await request.json();
-    messages = RequestSchema.parse(body).messages;
+    incoming = RequestSchema.parse(await request.json()).messages;
   } catch {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  // --- 3. Stream -----------------------------------------------------------
+  // --- 3. Set up -----------------------------------------------------------
   let provider;
   try {
     provider = getProvider();
@@ -107,41 +108,93 @@ export async function POST(request: Request) {
   }
 
   const { temperature, maxTokens } = getGenerationSettings();
-  const controller = new AbortController();
-  // If the user closes the tab, stop paying for tokens nobody will read.
-  request.signal.addEventListener("abort", () => controller.abort());
+  const model = getModel(provider);
+  const tools = getToolDefinitions();
+  const system = buildSystemPrompt({ searchEnabled: tools.length > 0 });
 
+  const abortController = new AbortController();
+  request.signal.addEventListener("abort", () => abortController.abort());
+
+  // --- 4. Agent loop -------------------------------------------------------
   const stream = new ReadableStream<Uint8Array>({
-    async start(streamController) {
-      try {
-        const tokens = provider.stream({
-          system: buildSystemPrompt(),
-          messages,
-          model: getModel(provider),
-          temperature,
-          maxTokens,
-          signal: controller.signal,
-        });
+    async start(controller) {
+      const conversation: ChatMessage[] = incoming.map((message) => ({ ...message }));
+      let searchesUsed = 0;
 
-        for await (const text of tokens) {
-          streamController.enqueue(line({ type: "delta", text }));
+      try {
+        for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+          // On the final round we withdraw the tools, which forces the model
+          // to answer with what it has instead of asking for more.
+          const offerTools = round < MAX_TOOL_ROUNDS && searchesUsed < MAX_TOTAL_SEARCHES;
+
+          let assistantText = "";
+          const calls: ToolCall[] = [];
+
+          for await (const event of provider.stream({
+            system,
+            messages: conversation,
+            model,
+            temperature,
+            maxTokens,
+            tools: offerTools ? tools : [],
+            signal: abortController.signal,
+          })) {
+            if (event.type === "text") {
+              assistantText += event.text;
+              controller.enqueue(line({ type: "delta", text: event.text }));
+            } else {
+              calls.push(event.call);
+            }
+          }
+
+          if (calls.length === 0) break;
+
+          // Record what the model asked for, then answer each request.
+          conversation.push({
+            role: "assistant",
+            content: assistantText,
+            toolCalls: calls,
+          });
+
+          for (const call of calls) {
+            if (searchesUsed >= MAX_TOTAL_SEARCHES) {
+              conversation.push({
+                role: "tool",
+                toolCallId: call.id,
+                toolName: call.name,
+                content: "Search limit reached for this message. Answer with what you have.",
+              });
+              continue;
+            }
+            searchesUsed += 1;
+
+            const query = typeof call.input.query === "string" ? call.input.query : "";
+            controller.enqueue(line({ type: "tool_start", name: call.name, query }));
+
+            const result = await runTool(call, abortController.signal);
+
+            controller.enqueue(line({ type: "tool_end", name: call.name, sources: result.sources }));
+            conversation.push({
+              role: "tool",
+              toolCallId: call.id,
+              toolName: call.name,
+              content: result.forModel,
+            });
+          }
         }
-        streamController.enqueue(line({ type: "done" }));
+
+        controller.enqueue(line({ type: "done" }));
       } catch (error) {
-        // The response is already streaming, so we cannot change the status
-        // code. We send the error as a final event instead.
         const message =
-          error instanceof LLMError
-            ? error.message
-            : "The model stream failed unexpectedly.";
+          error instanceof LLMError ? error.message : "The model stream failed unexpectedly.";
         console.error("[chat] stream failed:", error);
-        streamController.enqueue(line({ type: "error", message }));
+        controller.enqueue(line({ type: "error", message }));
       } finally {
-        streamController.close();
+        controller.close();
       }
     },
     cancel() {
-      controller.abort();
+      abortController.abort();
     },
   });
 
@@ -149,7 +202,7 @@ export async function POST(request: Request) {
     headers: {
       "content-type": "application/x-ndjson; charset=utf-8",
       "cache-control": "no-store, no-transform",
-      "x-accel-buffering": "no", // stop nginx-style proxies from buffering
+      "x-accel-buffering": "no",
     },
   });
 }

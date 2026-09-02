@@ -2,10 +2,17 @@
 
 import { useCallback, useRef, useState } from "react";
 
+export interface Source {
+  title: string;
+  url: string;
+}
+
 export interface UiMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Pages the assistant consulted, shown so you can check its homework. */
+  sources?: Source[];
 }
 
 const newId = () =>
@@ -16,13 +23,15 @@ const newId = () =>
 /**
  * All the client-side chat logic in one hook, so the components stay dumb.
  *
- * The interesting part is `readStream`: we read the response body chunk by
- * chunk, split it on newlines, and append each text delta to the last message.
- * That append-as-you-go loop is the entire trick behind a typing effect.
+ * The core trick is `readStream`: read the body chunk by chunk, split on
+ * newlines, and act on each event. Text deltas append to the last message -
+ * that append-in-a-loop IS the typing effect. Tool events update a status
+ * line, because a search takes a second or two and silence reads as broken.
  */
 export function useChat() {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [activity, setActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -30,6 +39,7 @@ export function useChat() {
     abortRef.current?.abort();
     abortRef.current = null;
     setIsStreaming(false);
+    setActivity(null);
   }, []);
 
   const reset = useCallback(() => {
@@ -47,11 +57,8 @@ export function useChat() {
       const userMessage: UiMessage = { id: newId(), role: "user", content: text };
       const assistantMessage: UiMessage = { id: newId(), role: "assistant", content: "" };
 
-      // Snapshot the history we are about to send, before React state updates.
-      const history = [...messages, userMessage].map(({ role, content }) => ({
-        role,
-        content,
-      }));
+      // Only role + content go to the server; sources are display-only.
+      const history = [...messages, userMessage].map(({ role, content }) => ({ role, content }));
 
       setMessages((current) => [...current, userMessage, assistantMessage]);
       setIsStreaming(true);
@@ -59,13 +66,9 @@ export function useChat() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const appendToAssistant = (chunk: string) =>
+      const updateAssistant = (update: (message: UiMessage) => UiMessage) =>
         setMessages((current) =>
-          current.map((message) =>
-            message.id === assistantMessage.id
-              ? { ...message, content: message.content + chunk }
-              : message,
-          ),
+          current.map((message) => (message.id === assistantMessage.id ? update(message) : message)),
         );
 
       try {
@@ -76,8 +79,8 @@ export function useChat() {
           signal: controller.signal,
         });
 
-        // The session cookie expires after 7 days. Send them back to the
-        // login screen rather than showing a cryptic error.
+        // The session cookie expires after 7 days. Send them back to login
+        // rather than showing a cryptic error.
         if (response.status === 401) {
           window.location.href = "/login";
           return;
@@ -105,25 +108,58 @@ export function useChat() {
             if (!raw) continue;
 
             const event = JSON.parse(raw);
-            if (event.type === "delta") appendToAssistant(event.text);
-            else if (event.type === "error") throw new Error(event.message);
+
+            switch (event.type) {
+              case "delta":
+                setActivity(null);
+                updateAssistant((message) => ({
+                  ...message,
+                  content: message.content + event.text,
+                }));
+                break;
+
+              case "tool_start":
+                setActivity(
+                  event.query ? `Searching the web for "${event.query}"` : "Searching the web",
+                );
+                break;
+
+              case "tool_end":
+                setActivity(null);
+                if (Array.isArray(event.sources) && event.sources.length > 0) {
+                  updateAssistant((message) => ({
+                    ...message,
+                    // Merge across rounds, de-duplicated by URL.
+                    sources: [
+                      ...(message.sources ?? []),
+                      ...event.sources.filter(
+                        (source: Source) =>
+                          !(message.sources ?? []).some((existing) => existing.url === source.url),
+                      ),
+                    ],
+                  }));
+                }
+                break;
+
+              case "error":
+                throw new Error(event.message);
+            }
           }
         }
       } catch (caught) {
         if ((caught as Error).name === "AbortError") return;
-        const message = caught instanceof Error ? caught.message : "Something went wrong.";
-        setError(message);
-        // Drop an empty assistant bubble so the UI does not show a blank turn.
+        setError(caught instanceof Error ? caught.message : "Something went wrong.");
         setMessages((current) =>
           current.filter((m) => !(m.id === assistantMessage.id && m.content === "")),
         );
       } finally {
         setIsStreaming(false);
+        setActivity(null);
         abortRef.current = null;
       }
     },
     [isStreaming, messages],
   );
 
-  return { messages, isStreaming, error, send, stop, reset };
+  return { messages, isStreaming, activity, error, send, stop, reset };
 }

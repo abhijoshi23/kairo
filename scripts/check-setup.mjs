@@ -89,6 +89,21 @@ if (!passphrase) {
   ok(`APP_PASSPHRASE set (${passphrase.length} chars)`);
 }
 
+const searchProvider = (env.SEARCH_PROVIDER || "none").trim().toLowerCase();
+if (searchProvider === "none" || !searchProvider) {
+  info("Web search: off (set SEARCH_PROVIDER to tavily or serper to enable)");
+} else {
+  const searchKeyVar = searchProvider === "tavily" ? "TAVILY_API_KEY" : "SERPER_API_KEY";
+  const searchSignup =
+    searchProvider === "tavily" ? "https://app.tavily.com" : "https://serper.dev";
+  if (!(env[searchKeyVar] || "").trim()) {
+    console.log(`${YELLOW}  !${RESET} SEARCH_PROVIDER=${searchProvider} but ${searchKeyVar} is empty`);
+    console.log(`      Kairo will run without search. Get a key: ${searchSignup}`);
+  } else {
+    ok(`Web search: ${BOLD}${searchProvider}${RESET}`);
+  }
+}
+
 const providerName = (env.LLM_PROVIDER || "").trim().toLowerCase();
 if (!providerName) {
   bad("LLM_PROVIDER is empty");

@@ -34,6 +34,19 @@ Set two variables in `.env.local`:
 | Claude | `anthropic` | Prepaid credits | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
 | OpenAI | `openai` | Prepaid credits | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 
+### Turning on web search
+
+Optional. Without it Kairo says "I can't verify that"; with it, it looks things
+up and cites what it found.
+
+| Provider | `SEARCH_PROVIDER` | Free allowance | Key |
+|---|---|---|---|
+| Tavily | `tavily` | 1,000 credits/month | [app.tavily.com](https://app.tavily.com) |
+| Serper | `serper` | 2,500 searches/month | [serper.dev](https://serper.dev) |
+
+Tavily returns cleaned page extracts (better answers); Serper returns Google
+snippets (bigger allowance). Brave's free tier ended in February 2026.
+
 `LLM_MODEL` is optional; leave it blank to use each provider's default.
 
 ---
@@ -69,6 +82,18 @@ Chat.tsx
        append text as it arrives                                     Ollama
 ```
 
+When search is on, `/api/chat` is not one model call but a loop:
+
+```
+model: "call web_search{query}"  →  you run it  →  "<search_results>…</search_results>"
+                                                      ↓
+model: "…and here is the answer, citing [1][2]"
+```
+
+Each turn re-sends the whole conversation plus every result so far, so cost
+grows faster than linearly. The loop is capped at 3 tool rounds and 4 searches;
+on the final round the tools are withdrawn, which forces an answer.
+
 The key architectural decision: **the browser never talks to the LLM directly.**
 Your API key lives only on the server. A frontend-only version of this app
 would hand your key to anyone who opens devtools.
@@ -96,6 +121,10 @@ src/
     ├── persona/
     │   ├── profile.ts        ← EDIT THIS: the facts about you
     │   └── index.ts          assembles the system prompt
+    ├── search/
+    │   ├── tavily.ts / serper.ts   one interface, two search back-ends
+    │   └── index.ts                picks one from env, or none
+    ├── tools/index.ts        the tool surface — read as a security boundary
     ├── auth.ts               signed session cookies, constant-time compares
     ├── rate-limit.ts         cheap spend guard
     └── useChat.ts            client-side streaming + state
@@ -134,7 +163,8 @@ Be clear-eyed about the limits:
 |---|---|
 | Rate limiter | In-memory, per serverless instance. A stumble guard, not a spend guard. Move it to Redis (Upstash) if you need a real one. |
 | `clientKey()` | Trusts `x-forwarded-for`, which is only safe because **Vercel overwrites it**. On a VPS or behind your own nginx it is spoofable — fix it before hosting elsewhere. |
-| Prompt injection | The rules in the system prompt are a mitigation, not a guarantee. The real defence is that this app can only emit text: no tools, no database, no filesystem. That changes the day you add tool calling. |
+| Prompt injection | Now a live concern: search pulls text written by strangers into the prompt. Results are wrapped in `<search_results>` tags, our own tags are stripped from the content first (delimiting without escaping the delimiter is the SQL-concatenation mistake), each result is truncated, and the prompt says the block is data. Mitigation, not a guarantee. |
+| SSRF | The model can search but **cannot fetch a URL**. That omission is the point: a "read this page" tool lets an attacker aim the server at cloud metadata (169.254.169.254) or internal services. A query string cannot address a host. Think hard before adding fetch. |
 | `profile.ts` | Public twice over — it is in this repo, and injection can extract the system prompt. **Put nothing there you would not publish.** |
 
 **The one control an attacker cannot bypass is a hard spend limit in your
