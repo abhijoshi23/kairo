@@ -58,10 +58,17 @@ export interface StreamOptions {
   signal?: AbortSignal;
 }
 
+export interface AudioInput {
+  data: Buffer;
+  mimeType: string;
+}
+
 export interface LLMProvider {
   readonly name: string;
   readonly defaultModel: string;
   stream(options: StreamOptions): AsyncGenerator<StreamEvent>;
+  /** Speech-to-text. Absent when the provider has no transcription endpoint. */
+  transcribe?(audio: AudioInput): Promise<string>;
 }
 
 export class LLMError extends Error {

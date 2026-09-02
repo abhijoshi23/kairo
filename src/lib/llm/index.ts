@@ -12,6 +12,7 @@ const providers: Record<string, LLMProvider> = {
     baseUrl: "https://api.openai.com/v1",
     apiKey: () => process.env.OPENAI_API_KEY,
     defaultModel: "gpt-4o-mini",
+    whisperModel: "whisper-1",
   }),
 
   groq: createOpenAICompatibleProvider({
@@ -19,6 +20,7 @@ const providers: Record<string, LLMProvider> = {
     baseUrl: "https://api.groq.com/openai/v1",
     apiKey: () => process.env.GROQ_API_KEY,
     defaultModel: "llama-3.3-70b-versatile",
+    whisperModel: "whisper-large-v3",
   }),
 
   ollama: createOpenAICompatibleProvider({

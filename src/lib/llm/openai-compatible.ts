@@ -1,11 +1,20 @@
 import {
   LLMError,
   parseToolInput,
+  type AudioInput,
   type ChatMessage,
   type LLMProvider,
   type ToolDefinition,
 } from "./types";
 import { describeHttpError, sseLines } from "./sse";
+
+const EXTENSION_BY_MIME: Record<string, string> = {
+  "audio/webm": "webm",
+  "audio/ogg": "ogg",
+  "audio/wav": "wav",
+  "audio/mp4": "mp4",
+  "audio/mpeg": "mp3",
+};
 
 /**
  * OpenAI's /chat/completions shape is a de-facto standard. OpenAI, Groq and
@@ -63,10 +72,45 @@ export function createOpenAICompatibleProvider(config: {
   apiKey: () => string | undefined;
   defaultModel: string;
   requiresKey?: boolean;
+  /** Set this to expose transcribe() - only providers with a Whisper endpoint need it. */
+  whisperModel?: string;
 }): LLMProvider {
   return {
     name: config.name,
     defaultModel: config.defaultModel,
+
+    ...(config.whisperModel
+      ? {
+          async transcribe({ data, mimeType }: AudioInput) {
+            const key = config.apiKey();
+            if (config.requiresKey !== false && !key) {
+              throw new LLMError(
+                `No API key configured for provider "${config.name}"`,
+                500,
+                config.name,
+              );
+            }
+
+            const extension = EXTENSION_BY_MIME[mimeType] ?? "webm";
+            const form = new FormData();
+            form.append("file", new Blob([new Uint8Array(data)], { type: mimeType }), `audio.${extension}`);
+            form.append("model", config.whisperModel!);
+
+            const response = await fetch(`${config.baseUrl.replace(/\/$/, "")}/audio/transcriptions`, {
+              method: "POST",
+              headers: { authorization: `Bearer ${key ?? "local"}` },
+              body: form,
+            });
+
+            if (!response.ok) {
+              throw new LLMError(await describeHttpError(response), response.status, config.name);
+            }
+
+            const json = await response.json();
+            return (json.text ?? "").trim();
+          },
+        }
+      : {}),
 
     async *stream({ system, messages, model, temperature, maxTokens, tools, signal }) {
       const key = config.apiKey();
