@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { confirmVoiceUsage } from "@/lib/voiceWarning";
 
 type VoiceState = "idle" | "recording" | "transcribing";
 
@@ -42,6 +43,14 @@ export default function Composer({
   }
 
   async function startRecording() {
+    if (
+      !confirmVoiceUsage(
+        "Voice input records your microphone and sends the audio to a third-party AI provider for transcription.",
+      )
+    ) {
+      return;
+    }
+
     setVoiceError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });

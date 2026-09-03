@@ -44,6 +44,10 @@ export default function Chat() {
             )}
             <button
               onClick={async () => {
+                // Clear the conversation before navigating away - it lives in
+                // localStorage, not the session, so signing out alone would
+                // otherwise leave it sitting there for whoever signs in next.
+                reset();
                 await fetch("/api/login", { method: "DELETE" });
                 window.location.href = "/login";
               }}

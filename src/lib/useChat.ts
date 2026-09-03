@@ -83,6 +83,17 @@ export function useChat() {
     stop();
     setMessages([]);
     setError(null);
+    // Clear storage here too, synchronously, rather than relying only on the
+    // effect above - a caller that navigates away right after reset() (sign
+    // out redirects immediately) can't count on React having flushed that
+    // effect first.
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // Storage disabled - nothing was persisted to clear anyway.
+      }
+    }
   }, [stop]);
 
   const send = useCallback(

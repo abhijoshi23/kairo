@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { UiMessage } from "@/lib/useChat";
+import { confirmVoiceUsage } from "@/lib/voiceWarning";
 
 // Only one clip plays at a time - starting another pauses whatever bubble
 // was mid-playback, module-scoped since bubbles don't otherwise know about
@@ -62,6 +63,14 @@ export default function MessageBubble({
       activeAudio?.pause();
       cleanupAudio();
       setSpeechState("idle");
+      return;
+    }
+
+    if (
+      !confirmVoiceUsage(
+        "Reading aloud sends this reply's text to a third-party AI provider to generate speech.",
+      )
+    ) {
       return;
     }
 
