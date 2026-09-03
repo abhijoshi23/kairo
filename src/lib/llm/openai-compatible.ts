@@ -2,6 +2,7 @@ import {
   LLMError,
   parseToolInput,
   type AudioInput,
+  type AudioOutput,
   type ChatMessage,
   type LLMProvider,
   type ToolDefinition,
@@ -14,6 +15,15 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   "audio/wav": "wav",
   "audio/mp4": "mp4",
   "audio/mpeg": "mp3",
+};
+
+const MIME_BY_FORMAT: Record<string, string> = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  opus: "audio/ogg",
+  aac: "audio/aac",
+  flac: "audio/flac",
+  pcm: "audio/pcm",
 };
 
 /**
@@ -74,7 +84,20 @@ export function createOpenAICompatibleProvider(config: {
   requiresKey?: boolean;
   /** Set this to expose transcribe() - only providers with a Whisper endpoint need it. */
   whisperModel?: string;
+  /** Set this to expose synthesize() - only providers with a speech endpoint need it. */
+  ttsModel?: string;
+  ttsVoice?: string;
+  /** Defaults to "mp3". Groq's Orpheus models only speak "wav". */
+  ttsFormat?: string;
 }): LLMProvider {
+  function requireKey(): string | undefined {
+    const key = config.apiKey();
+    if (config.requiresKey !== false && !key) {
+      throw new LLMError(`No API key configured for provider "${config.name}"`, 500, config.name);
+    }
+    return key;
+  }
+
   return {
     name: config.name,
     defaultModel: config.defaultModel,
@@ -82,15 +105,7 @@ export function createOpenAICompatibleProvider(config: {
     ...(config.whisperModel
       ? {
           async transcribe({ data, mimeType }: AudioInput) {
-            const key = config.apiKey();
-            if (config.requiresKey !== false && !key) {
-              throw new LLMError(
-                `No API key configured for provider "${config.name}"`,
-                500,
-                config.name,
-              );
-            }
-
+            const key = requireKey();
             const extension = EXTENSION_BY_MIME[mimeType] ?? "webm";
             const form = new FormData();
             form.append("file", new Blob([new Uint8Array(data)], { type: mimeType }), `audio.${extension}`);
@@ -112,15 +127,38 @@ export function createOpenAICompatibleProvider(config: {
         }
       : {}),
 
+    ...(config.ttsModel
+      ? {
+          async synthesize(text: string): Promise<AudioOutput> {
+            const key = requireKey();
+            const format = config.ttsFormat ?? "mp3";
+
+            const response = await fetch(`${config.baseUrl.replace(/\/$/, "")}/audio/speech`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                authorization: `Bearer ${key ?? "local"}`,
+              },
+              body: JSON.stringify({
+                model: config.ttsModel,
+                input: text,
+                voice: config.ttsVoice ?? "alloy",
+                response_format: format,
+              }),
+            });
+
+            if (!response.ok) {
+              throw new LLMError(await describeHttpError(response), response.status, config.name);
+            }
+
+            const data = Buffer.from(await response.arrayBuffer());
+            return { data, mimeType: MIME_BY_FORMAT[format] ?? "audio/mpeg" };
+          },
+        }
+      : {}),
+
     async *stream({ system, messages, model, temperature, maxTokens, tools, signal }) {
-      const key = config.apiKey();
-      if (config.requiresKey !== false && !key) {
-        throw new LLMError(
-          `No API key configured for provider "${config.name}"`,
-          500,
-          config.name,
-        );
-      }
+      const key = requireKey();
 
       const response = await fetch(`${config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  const { allowed, retryAfter } = checkRateLimit(clientKey(request));
+  const { allowed, retryAfter } = await checkRateLimit(clientKey(request));
   if (!allowed) {
     return Response.json(
       { error: `Too many requests. Try again in ${retryAfter}s.` },

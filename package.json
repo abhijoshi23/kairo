@@ -11,6 +11,8 @@
     "check": "node scripts/check-setup.mjs"
   },
   "dependencies": {
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.3",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

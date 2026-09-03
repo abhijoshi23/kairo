@@ -82,7 +82,7 @@ export async function POST(request: Request) {
   }
 
   // --- 1. Rate limit -------------------------------------------------------
-  const { allowed, retryAfter } = checkRateLimit(clientKey(request));
+  const { allowed, retryAfter } = await checkRateLimit(clientKey(request));
   if (!allowed) {
     return Response.json(
       { error: `Too many requests. Try again in ${retryAfter}s.` },

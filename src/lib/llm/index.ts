@@ -13,6 +13,8 @@ const providers: Record<string, LLMProvider> = {
     apiKey: () => process.env.OPENAI_API_KEY,
     defaultModel: "gpt-4o-mini",
     whisperModel: "whisper-1",
+    ttsModel: "gpt-4o-mini-tts",
+    ttsVoice: process.env.TTS_VOICE || "alloy",
   }),
 
   groq: createOpenAICompatibleProvider({
@@ -21,6 +23,9 @@ const providers: Record<string, LLMProvider> = {
     apiKey: () => process.env.GROQ_API_KEY,
     defaultModel: "llama-3.3-70b-versatile",
     whisperModel: "whisper-large-v3",
+    ttsModel: "canopylabs/orpheus-v1-english",
+    ttsVoice: process.env.TTS_VOICE || "hannah",
+    ttsFormat: "wav",
   }),
 
   ollama: createOpenAICompatibleProvider({

@@ -63,12 +63,19 @@ export interface AudioInput {
   mimeType: string;
 }
 
+export interface AudioOutput {
+  data: Buffer;
+  mimeType: string;
+}
+
 export interface LLMProvider {
   readonly name: string;
   readonly defaultModel: string;
   stream(options: StreamOptions): AsyncGenerator<StreamEvent>;
   /** Speech-to-text. Absent when the provider has no transcription endpoint. */
   transcribe?(audio: AudioInput): Promise<string>;
+  /** Text-to-speech. Absent when the provider has no speech endpoint. */
+  synthesize?(text: string): Promise<AudioOutput>;
 }
 
 export class LLMError extends Error {

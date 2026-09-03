@@ -49,6 +49,25 @@ snippets (bigger allowance). Brave's free tier ended in February 2026.
 
 `LLM_MODEL` is optional; leave it blank to use each provider's default.
 
+### Voice in and out
+
+Works automatically with no extra setup if `LLM_PROVIDER` is `groq` or
+`openai` — both expose a Whisper endpoint (speech-to-text) and a TTS endpoint
+(text-to-speech). Anthropic and Ollama have neither, so the mic button and the
+speaker icon simply don't do anything useful under those providers; the API
+returns a clear error rather than a silent failure.
+
+- **Mic button** in the composer records with your browser's microphone,
+  transcribes on release, and drops the text into the input box for you to
+  edit before sending — it never sends on your behalf.
+- **Speaker icon** under an assistant reply sends that reply's text to the
+  provider's TTS endpoint and plays back the result.
+- `TTS_VOICE` (optional) picks the voice. Groq's Orpheus model needs its usage
+  terms accepted once at
+  [console.groq.com](https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english)
+  before the API will serve it — a 400 mentioning "terms acceptance" means
+  that step is still pending.
+
 ---
 
 ## Make it *yours*
@@ -161,7 +180,7 @@ Be clear-eyed about the limits:
 
 | Control | Reality |
 |---|---|
-| Rate limiter | In-memory, per serverless instance. A stumble guard, not a spend guard. Move it to Redis (Upstash) if you need a real one. |
+| Rate limiter | Redis-backed (Upstash) when `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` are set - a real, shared counter across instances. Without them it silently falls back to the old in-memory counter: per serverless instance, a stumble guard rather than a spend guard. Set the env vars before you deploy anywhere with real traffic. |
 | `clientKey()` | Trusts `x-forwarded-for`, which is only safe because **Vercel overwrites it**. On a VPS or behind your own nginx it is spoofable — fix it before hosting elsewhere. |
 | Prompt injection | Now a live concern: search pulls text written by strangers into the prompt. Results are wrapped in `<search_results>` tags, our own tags are stripped from the content first (delimiting without escaping the delimiter is the SQL-concatenation mistake), each result is truncated, and the prompt says the block is data. Mitigation, not a guarantee. |
 | SSRF | The model can search but **cannot fetch a URL**. That omission is the point: a "read this page" tool lets an attacker aim the server at cloud metadata (169.254.169.254) or internal services. A query string cannot address a host. Think hard before adding fetch. |
@@ -192,15 +211,25 @@ Use a hosted provider for anything you deploy.
 
 Roughly in order of effort:
 
-- **Conversation history** — persist chats to `localStorage`, then to a database.
+- ~~**Auth**~~ — done. Passphrase-gated, see [Security](#security) above.
+- ~~**Tool use / function calling**~~ — done, for web search. The agent loop
+  in `/api/chat` is generic over any `ToolDefinition`, so adding a calendar or
+  another API is a new tool in `src/lib/tools`, not new plumbing.
+- ~~**Conversation history**~~ — done. Chats persist to `localStorage` and
+  survive a reload; "New chat" clears it. A database (for cross-device
+  history) is the natural next step if you want one.
+- ~~**Voice**~~ — done, both directions. The mic button in the composer
+  transcribes speech via the provider's Whisper endpoint; the speaker icon
+  under a reply sends it to the provider's TTS endpoint and plays it back.
+  Anthropic and Ollama don't expose either endpoint, so both features quietly
+  disable themselves under those providers rather than pretending to work.
+- ~~**Rate limiting, for real**~~ — done. Redis-backed via Upstash when
+  configured (see the table above), in-memory fallback otherwise.
 - **RAG** — embed your resume, notes and project docs, retrieve the relevant
   chunks per question, and inject them into the prompt. This is what lets the
   assistant answer from documents instead of a hand-written profile.
-- **Tool use / function calling** — let the model call real functions: check
-  your calendar, search the web, query an API.
 - **Evals** — write a set of questions with expected answers and score changes
   to the prompt against them. The only way to know a prompt edit helped.
-- **Auth** — gate the private version behind a login, keep a public read-only one.
 
 ---
 

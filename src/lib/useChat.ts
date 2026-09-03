@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface Source {
   title: string;
@@ -20,6 +20,21 @@ const newId = () =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
 
+// Local only, on purpose - no account system exists yet to key a server-side
+// history by. Swap this for a database write once one does.
+const STORAGE_KEY = "kairo:messages";
+
+function loadStoredMessages(): UiMessage[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * All the client-side chat logic in one hook, so the components stay dumb.
  *
@@ -34,6 +49,28 @@ export function useChat() {
   const [activity, setActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Restored after mount, not in the initial useState, so the server-rendered
+  // empty state and the client's first render still match - hydration would
+  // otherwise fail the moment a browser actually has something stored.
+  useEffect(() => {
+    const stored = loadStoredMessages();
+    if (stored.length > 0) setMessages(stored);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (messages.length > 0) {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      } else {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      // Storage full or disabled (private browsing) - conversation still
+      // works for the session, it just won't survive a reload.
+    }
+  }, [messages]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   // Brute force is the obvious attack on a single shared passphrase, so this
   // endpoint gets a much tighter limit than the chat route.
-  const { allowed, retryAfter } = checkRateLimit(`login:${clientKey(request)}`, 8);
+  const { allowed, retryAfter } = await checkRateLimit(`login:${clientKey(request)}`, 8);
   if (!allowed) {
     return Response.json(
       { error: `Too many attempts. Try again in ${retryAfter}s.` },
