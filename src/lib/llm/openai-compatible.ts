@@ -172,6 +172,22 @@ export function createOpenAICompatibleProvider(config: {
           temperature,
           max_tokens: maxTokens,
           stream: true,
+          /**
+           * gpt-oss on Groq is a reasoning model: it spends completion tokens
+           * on a hidden "reasoning" field before it ever emits visible
+           * "content". Verified directly against Groq's API: the default
+           * effort burned ~270 reasoning tokens on a one-sentence answer, and
+           * in a long tool-augmented conversation that was enough to exhaust
+           * max_tokens before any content came out at all - an empty reply
+           * with no error, since finish_reason is still "stop". "low" cut
+           * reasoning tokens roughly in half with no loss of a real answer,
+           * and as a bonus it eases the same TPM budget MAX_TOOL_ROUNDS is
+           * tuned against. Scoped narrowly because this is a Groq+gpt-oss
+           * quirk we've actually tested, not a general OpenAI-compatible one.
+           */
+          ...(config.name === "groq" && model.includes("gpt-oss")
+            ? { reasoning_effort: "low" }
+            : {}),
           ...(tools.length > 0
             ? { tools: toOpenAITools(tools), tool_choice: "auto" }
             : {}),

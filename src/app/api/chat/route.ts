@@ -36,14 +36,31 @@ export const dynamic = "force-dynamic";
  *
  * Do the arithmetic before choosing these numbers. Each tool round is another
  * full model call carrying the whole conversation plus every result so far, so
- * cost grows faster than linearly. Three rounds plus a forced final answer is
- * enough for "search, refine, answer" and cannot run away.
+ * cost grows faster than linearly.
+ *
+ * MAX_TOOL_ROUNDS is 1, not 2, for a reason found by testing against the
+ * running app rather than guessed: openai/gpt-oss-120b on Groq is a reasoning
+ * model, and when a second round starts (first search wasn't conclusive, e.g.
+ * "who won the most recent F1 race" needs the model to reconcile today's date
+ * against a race calendar), it can spiral into a long silent "analysis"
+ * channel deliberation - observed case burned >2,000 completion tokens of
+ * pure reasoning and hit max_tokens before emitting a single word of the
+ * actual answer, an empty reply with no error. A single search round, forced
+ * to answer with whatever it got, has been reliable in the same testing.
+ * /api/chat's agent loop reports a clear error rather than a silent blank
+ * reply if this ever happens anyway - see the `!assistantText` check below.
+ *
+ * Also kept tight because Groq's free tier throttles by tokens per MINUTE,
+ * not per request (8,000 TPM for gpt-oss-120b at time of writing) - a search
+ * round resends the whole conversation plus every result so far, so this and
+ * MAX_SEARCH_RESULTS / MAX_CHARS_PER_RESULT (src/lib/tools/index.ts) are one
+ * shared budget against that ceiling, not independent knobs.
  */
 const MAX_MESSAGES = 24;
 const MAX_MESSAGE_CHARS = 4000;
 const MAX_TOTAL_CHARS = 24_000;
-const MAX_TOOL_ROUNDS = 3;
-const MAX_TOTAL_SEARCHES = 4;
+const MAX_TOOL_ROUNDS = 1;
+const MAX_TOTAL_SEARCHES = 2;
 
 const RequestSchema = z.object({
   messages: z
@@ -147,7 +164,25 @@ export async function POST(request: Request) {
             }
           }
 
-          if (calls.length === 0) break;
+          if (calls.length === 0) {
+            // A reasoning model can burn its whole token budget deliberating
+            // and reach the end of the stream having said nothing and asked
+            // for nothing - no exception, just silence. Left alone, that is
+            // an empty assistant bubble with no explanation, which reads
+            // exactly like "the app is broken" from the user's side. Say so
+            // instead of pretending the turn succeeded.
+            if (!assistantText) {
+              controller.enqueue(
+                line({
+                  type: "error",
+                  message:
+                    "The model produced no answer that round - it likely ran out of its response budget while reasoning. Try asking again, or rephrase more narrowly.",
+                }),
+              );
+              return;
+            }
+            break;
+          }
 
           // Record what the model asked for, then answer each request.
           conversation.push({

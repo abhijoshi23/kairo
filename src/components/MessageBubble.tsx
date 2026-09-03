@@ -12,6 +12,19 @@ let activeAudio: HTMLAudioElement | null = null;
 
 type SpeechState = "idle" | "loading" | "playing";
 
+/**
+ * Belt-and-suspenders against leaked tool-citation syntax.
+ *
+ * The system prompt tells the model to cite as plain markdown links, but
+ * that is a request, not a guarantee - some models (observed: gpt-oss via
+ * Groq, after a web_search round) emit their own training-time citation
+ * format instead, e.g. 【1†L1-L2】. There is no renderer for that here, so
+ * it would otherwise show up as literal garbage in the reply.
+ */
+function stripCitationArtifacts(text: string): string {
+  return text.replace(/【[^】]*】/g, "").replace(/\s+([.,;:!?])/g, "$1");
+}
+
 export default function MessageBubble({
   message,
   isStreaming,
@@ -58,7 +71,7 @@ export default function MessageBubble({
       const response = await fetch("/api/speak", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: message.content }),
+        body: JSON.stringify({ text: stripCitationArtifacts(message.content) }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
@@ -132,7 +145,7 @@ export default function MessageBubble({
               ),
             }}
           >
-            {message.content}
+            {stripCitationArtifacts(message.content)}
           </ReactMarkdown>
           {showPlaceholder && !activity && (
             <span className="cursor-blink text-muted">Thinking…</span>
