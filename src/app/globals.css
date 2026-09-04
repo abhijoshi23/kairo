@@ -11,8 +11,17 @@
   --accent-fg: #ffffff;
 }
 
+/*
+ * Three ways a theme gets picked, in increasing priority:
+ *   1. The :root defaults above - light.
+ *   2. The OS preference - only when the user hasn't overridden it
+ *      (":not([data-theme='light'])" lets an explicit light choice win
+ *      even when the system is dark).
+ *   3. An explicit choice from the ThemeToggle, stamped on <html> as
+ *      data-theme and persisted to localStorage - always wins.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0a0a0c;
     --surface: #16161b;
     --foreground: #f4f4f5;
@@ -22,6 +31,17 @@
     --accent-2: #ff8dc4;
     --accent-fg: #0a0a0c;
   }
+}
+
+:root[data-theme="dark"] {
+  --background: #0a0a0c;
+  --surface: #16161b;
+  --foreground: #f4f4f5;
+  --muted: #a1a1aa;
+  --border: #27272e;
+  --accent: #8b7cff;
+  --accent-2: #ff8dc4;
+  --accent-fg: #0a0a0c;
 }
 
 @theme inline {
@@ -83,9 +103,13 @@ body {
 .prose-chat th, .prose-chat td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
 .prose-chat blockquote { border-left: 3px solid var(--border); padding-left: 0.8rem; color: var(--muted); margin: 0.6rem 0; }
 
-/* Brand mark: gradient used on the header avatar and the empty-state hero. */
+/* Brand mark: gradient used on the header avatar, empty-state hero, login
+   screen and favicon. A soft highlight in one corner gives it some depth
+   instead of a flat gradient fill. */
 .kairo-mark {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.45), transparent 55%),
+    linear-gradient(145deg, var(--accent), var(--accent-2) 85%);
 }
 
 /* A message bubble plays this once when it mounts, never again while its

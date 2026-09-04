@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ThemeToggle from "./ThemeToggle";
 
 export default function LoginForm({ unconfigured }: { unconfigured: boolean }) {
   const [passphrase, setPassphrase] = useState("");
@@ -35,10 +36,13 @@ export default function LoginForm({ unconfigured }: { unconfigured: boolean }) {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center px-4">
+    <div className="relative flex min-h-dvh items-center justify-center px-4">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-xs">
         <div className="mb-7 flex flex-col items-center gap-2.5 text-center">
-          <span className="kairo-mark flex h-11 w-11 items-center justify-center rounded-xl text-lg font-bold text-accent-fg shadow-md">
+          <span className="kairo-mark flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-accent-fg shadow-md">
             K
           </span>
           <div>

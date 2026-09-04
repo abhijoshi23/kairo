@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Composer from "./Composer";
 import MessageBubble from "./MessageBubble";
+import ThemeToggle from "./ThemeToggle";
 import { useChat } from "@/lib/useChat";
 
 const SUGGESTIONS = [
@@ -55,7 +56,7 @@ export default function Chat() {
       <header className="border-b border-line px-4">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between py-3">
           <div className="flex items-center gap-2.5">
-            <span className="kairo-mark flex h-8 w-8 items-center justify-center rounded-xl text-sm font-bold text-accent-fg shadow-sm">
+            <span className="kairo-mark flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-accent-fg shadow-sm">
               K
             </span>
             <div className="leading-tight">
@@ -64,6 +65,7 @@ export default function Chat() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {messages.length > 0 && (
               <button
                 onClick={reset}
@@ -94,7 +96,7 @@ export default function Chat() {
           <div className="mx-auto w-full max-w-3xl py-6">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center gap-6 pt-[10vh] text-center">
-                <span className="kairo-mark flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-bold text-accent-fg shadow-md">
+                <span className="kairo-mark flex h-14 w-14 items-center justify-center rounded-full text-2xl font-bold text-accent-fg shadow-md">
                   K
                 </span>
                 <div>
