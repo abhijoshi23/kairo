@@ -38,7 +38,7 @@ export default function LoginForm({ unconfigured }: { unconfigured: boolean }) {
     <div className="flex min-h-dvh items-center justify-center px-4">
       <div className="w-full max-w-xs">
         <div className="mb-7 flex flex-col items-center gap-2.5 text-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-lg font-bold text-accent-fg">
+          <span className="kairo-mark flex h-11 w-11 items-center justify-center rounded-xl text-lg font-bold text-accent-fg shadow-md">
             K
           </span>
           <div>
@@ -65,12 +65,12 @@ export default function LoginForm({ unconfigured }: { unconfigured: boolean }) {
               aria-label="Passphrase"
               autoFocus
               autoComplete="current-password"
-              className="w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[0.9rem] outline-none transition-colors placeholder:text-muted focus:border-accent"
+              className="w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[0.9rem] outline-none transition-colors placeholder:text-muted focus:border-accent/60"
             />
             <button
               type="submit"
               disabled={!passphrase || busy}
-              className="w-full rounded-xl bg-accent px-3.5 py-2.5 text-[0.9rem] font-medium text-accent-fg transition-opacity disabled:opacity-35"
+              className="w-full rounded-xl bg-accent px-3.5 py-2.5 text-[0.9rem] font-medium text-accent-fg transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-35 disabled:active:scale-100"
             >
               {busy ? "Checking…" : "Continue"}
             </button>

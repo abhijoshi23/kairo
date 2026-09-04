@@ -26,6 +26,17 @@ function stripCitationArtifacts(text: string): string {
   return text.replace(/【[^】]*】/g, "").replace(/\s+([.,;:!?])/g, "$1");
 }
 
+/** The three-dot "still working on it" indicator common to chat UIs. */
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-1" aria-hidden>
+      <span className="kairo-typing-dot h-1.5 w-1.5 rounded-full bg-muted" />
+      <span className="kairo-typing-dot h-1.5 w-1.5 rounded-full bg-muted" />
+      <span className="kairo-typing-dot h-1.5 w-1.5 rounded-full bg-muted" />
+    </span>
+  );
+}
+
 export default function MessageBubble({
   message,
   isStreaming,
@@ -38,8 +49,20 @@ export default function MessageBubble({
   const isUser = message.role === "user";
   const [speechState, setSpeechState] = useState<SpeechState>("idle");
   const [speechError, setSpeechError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+
+  async function copyText() {
+    try {
+      await navigator.clipboard.writeText(stripCitationArtifacts(message.content));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard permission denied or unavailable - not worth surfacing an
+      // error for, the user can still select and copy the text by hand.
+    }
+  }
 
   const cleanupAudio = () => {
     if (objectUrlRef.current) {
@@ -115,8 +138,8 @@ export default function MessageBubble({
 
   if (isUser) {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-[0.95rem] leading-relaxed text-accent-fg whitespace-pre-wrap break-words">
+      <div className="kairo-rise flex justify-end">
+        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-[0.95rem] leading-relaxed text-accent-fg whitespace-pre-wrap break-words shadow-sm">
           {message.content}
         </div>
       </div>
@@ -126,10 +149,10 @@ export default function MessageBubble({
   const showPlaceholder = isStreaming && message.content.length === 0;
 
   return (
-    <div className="flex gap-3">
+    <div className="kairo-rise group flex gap-3">
       <div
         aria-hidden
-        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-[0.7rem] font-semibold tracking-tight"
+        className="kairo-mark mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-semibold tracking-tight text-accent-fg shadow-sm"
       >
         K
       </div>
@@ -137,7 +160,7 @@ export default function MessageBubble({
       <div className="min-w-0 max-w-[85%]">
         {isStreaming && activity && (
           <div className="mb-2 flex items-center gap-2 text-[0.8rem] text-muted">
-            <span className="cursor-blink">◆</span>
+            <TypingDots />
             <span>{activity}…</span>
           </div>
         )}
@@ -156,13 +179,11 @@ export default function MessageBubble({
           >
             {stripCitationArtifacts(message.content)}
           </ReactMarkdown>
-          {showPlaceholder && !activity && (
-            <span className="cursor-blink text-muted">Thinking…</span>
-          )}
+          {showPlaceholder && !activity && <TypingDots />}
         </div>
 
         {!isStreaming && message.content.length > 0 && (
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
             <button
               type="button"
               onClick={toggleSpeech}
@@ -189,6 +210,23 @@ export default function MessageBubble({
                     strokeLinecap="round"
                     fill="none"
                   />
+                </svg>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={copyText}
+              aria-label={copied ? "Copied" : "Copy reply"}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:text-foreground"
+            >
+              {copied ? (
+                <svg viewBox="0 0 24 24" className="kairo-pop-in h-3.5 w-3.5 text-emerald-500" fill="none">
+                  <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none">
+                  <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M5 15V6a1 1 0 0 1 1-1h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                 </svg>
               )}
             </button>

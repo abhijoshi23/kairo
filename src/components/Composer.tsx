@@ -108,7 +108,7 @@ export default function Composer({
   return (
     <div className="border-t border-line bg-background/85 backdrop-blur">
       <div className="mx-auto w-full max-w-3xl px-4 py-3">
-        <div className="flex items-end gap-2 rounded-2xl border border-line bg-surface p-2 focus-within:border-accent transition-colors">
+        <div className="flex items-end gap-2 rounded-[1.75rem] border border-line bg-surface p-2 pl-4 transition-colors focus-within:border-accent/60">
           <textarea
             ref={textareaRef}
             rows={1}
@@ -129,42 +129,50 @@ export default function Composer({
                   : "Ask Kairo anything…"
             }
             aria-label="Message"
-            className="max-h-[200px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[0.95rem] outline-none placeholder:text-muted"
+            className="max-h-[200px] flex-1 resize-none bg-transparent py-1.5 text-[0.95rem] outline-none placeholder:text-muted"
           />
-          <button
-            type="button"
-            onClick={toggleRecording}
-            disabled={isStreaming || voiceState === "transcribing"}
-            aria-label={voiceState === "recording" ? "Stop recording" : "Record voice message"}
-            aria-pressed={voiceState === "recording"}
-            className={`shrink-0 rounded-xl border p-2 transition-colors disabled:opacity-35 ${
-              voiceState === "recording"
-                ? "border-red-500/40 bg-red-500/10 text-red-500"
-                : "border-line text-muted hover:text-foreground"
-            }`}
-          >
-            {voiceState === "transcribing" ? (
-              <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] animate-spin" fill="none">
-                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
-                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none">
-                <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
-                <path
-                  d="M5 11a7 7 0 0 0 14 0M12 18v3"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  fill="none"
-                />
-              </svg>
+          <div className="relative shrink-0">
+            {voiceState === "recording" && (
+              <span
+                aria-hidden
+                className="kairo-pulse-ring absolute inset-0 rounded-full bg-red-500/50"
+              />
             )}
-          </button>
+            <button
+              type="button"
+              onClick={toggleRecording}
+              disabled={isStreaming || voiceState === "transcribing"}
+              aria-label={voiceState === "recording" ? "Stop recording" : "Record voice message"}
+              aria-pressed={voiceState === "recording"}
+              className={`relative rounded-full border p-2 transition-all disabled:opacity-35 active:scale-90 ${
+                voiceState === "recording"
+                  ? "border-red-500/40 bg-red-500/10 text-red-500"
+                  : "border-line text-muted hover:text-foreground"
+              }`}
+            >
+              {voiceState === "transcribing" ? (
+                <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] animate-spin" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
+                  <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none">
+                  <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
+                  <path
+                    d="M5 11a7 7 0 0 0 14 0M12 18v3"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                </svg>
+              )}
+            </button>
+          </div>
           {isStreaming ? (
             <button
               onClick={onStop}
-              className="shrink-0 rounded-xl border border-line px-3 py-2 text-sm font-medium text-muted transition-colors hover:text-foreground"
+              className="shrink-0 rounded-full border border-line px-3.5 py-2 text-sm font-medium text-muted transition-all hover:text-foreground active:scale-95"
             >
               Stop
             </button>
@@ -172,7 +180,7 @@ export default function Composer({
             <button
               onClick={submit}
               disabled={!value.trim()}
-              className="shrink-0 rounded-xl bg-accent px-3.5 py-2 text-sm font-medium text-accent-fg transition-opacity disabled:opacity-35"
+              className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-all hover:opacity-90 active:scale-95 disabled:opacity-35 disabled:active:scale-100"
             >
               Send
             </button>
