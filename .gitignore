@@ -9,6 +9,9 @@ build/
 .env.local
 .env*.local
 
+# Never commit your personal details
+src/lib/persona/profile.local.md
+
 *.tsbuildinfo
 next-env.d.ts
 .vercel

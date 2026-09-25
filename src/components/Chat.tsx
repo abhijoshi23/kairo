@@ -17,7 +17,7 @@ const SUGGESTIONS = [
 // enough that auto-scrolling on a new message won't feel like a jump.
 const NEAR_BOTTOM_THRESHOLD = 120;
 
-export default function Chat() {
+export default function Chat({ ownerName }: { ownerName: string }) {
   const { messages, isStreaming, activity, error, send, stop, reset } = useChat();
   const bottomRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -102,7 +102,7 @@ export default function Chat() {
                 <div>
                   <h2 className="text-xl font-semibold tracking-tight">Hi, I&apos;m Kairo. 👋</h2>
                   <p className="mt-1.5 text-sm text-muted">
-                    Ask me about Abhi, or anything else you need a hand with.
+                    Ask me about {ownerName}, or anything else you need a hand with.
                   </p>
                 </div>
                 <div className="grid w-full max-w-lg gap-2 sm:grid-cols-2">

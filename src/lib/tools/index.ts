@@ -1,4 +1,5 @@
 import type { ToolCall, ToolDefinition } from "@/lib/llm";
+import { OWNER_NAME } from "@/lib/persona/profile";
 import { getSearchProvider, SearchError } from "@/lib/search";
 
 /**
@@ -40,8 +41,8 @@ export function getToolDefinitions(): ToolDefinition[] {
         "Search the web for current, factual information. Use this whenever the " +
         "answer depends on recent events, prices, releases, who currently holds a " +
         "role, or anything else that may have changed recently, and whenever you " +
-        "are simply unsure. Do not use it for questions about Abhi (answer those " +
-        "from your profile) or for reasoning you can do yourself.",
+        `are simply unsure. Do not use it for questions about ${OWNER_NAME} (answer ` +
+        "those from your profile) or for reasoning you can do yourself.",
       inputSchema: {
         type: "object",
         properties: {
